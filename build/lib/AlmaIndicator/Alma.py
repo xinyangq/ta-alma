@@ -1,48 +1,51 @@
+import math
 import numpy as np
-import pandas as pd
-from math import exp
-from ta.utils import IndicatorMixin
+import pandas
 
-class ALMAIndicator(IndicatorMixin):
-    def __init__(
-        self, 
-        close: pd.Series, 
-        fillna: bool = False):
-        self._close = close
-        self._fillna = fillna
-        self._run()
-    
-    def _run(self):
-        self._alma_weights = self.alma_weights()
-        self._calculate_alma = self.calculate_alma()
-        self._alma = self._close.rolling(window=9).apply(self.calculate_alma)
-        
-    def alma(self) -> pd.Series:
-        alma = self._check_fillna(self._alma, value=0)
-        return pd.Series(alma, name=f'alma')
-        
-    def calculate_alma(self, prices: list = []):
-        """
-        Calculates and returns ALMA figure
-        """
-        weights = self._alma_weights
-        if len(prices) < 9:
-            return None
-        else:
-            weighted_sum = weights * prices
-            alma = weighted_sum.sum() / weights.sum()
-            return alma
-    
-    def alma_weights(self, window=9, offset=0.85, sigma=6):
-        """
-        Calculates ALMA weights and returns array
-        """
-        m = int(offset * (window - 1))
-        s = (window/sigma)
-        k_all = list(range(0, window))
-        weights = []
-        # this generates a reversed weights
-        for k in k_all:
-            Wtd = exp(-((k-m)**2)/(2*(s**2)))
-            weights.append(Wtd)
-        return np.array(weights)
+
+# calculate single alma of each day
+# prices, Series, close price of the stock
+# window, int, window size
+# offset, float, offset value
+# sigma, int, sigma
+# alma_single, float, the alma value of the single day
+def _single_alma(prices, window, offset, sigma):
+    # if data length is less than window, return None
+    if len(prices) < 9:
+        return None
+
+    # get weights
+    m = int(offset * (window - 1))
+    s = window / sigma
+    weights = np.array(range(window))
+    temp = -((weights - m) ** 2) / (2 * (s ** 2))
+    weights = [math.exp(item) for item in temp]
+    weights = np.array(weights)
+
+    # calculate alma
+    weighted_sum = weights * prices  # weighted price
+    alma_single = weighted_sum.sum() / weights.sum()  # weighted average price
+
+    return alma_single
+
+
+# calculate whole alma of the whole series
+# prices, Series, close price of the stock
+# window, int, window size
+# offset, float, offset value
+# sigma, int, sigma
+# alma, series, alma average line
+def get_alma(prices, window=9, offset=0.85, sigma=6):
+    # calculate alma, series
+    alma = prices.rolling(window=window).apply(_single_alma, args=(window, offset, sigma,))
+
+    # replace inf and -inf with nan
+    alma = alma.replace([np.inf, -np.inf], np.nan)
+
+    return alma
+
+
+if __name__ == '__main__':
+    price = pandas.Series(list(range(19)))
+    alma_line = get_alma(price, window=9, offset=0.85, sigma=6)
+    i = 1
